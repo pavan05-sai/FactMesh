@@ -1,79 +1,97 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { env } from "../config/env";
+import { createLlmModel } from "./llmProvider";
+import { invokeLlm } from "./llmHelper";
 import { PipelineState, PipelineReport } from "./state";
+import { calculateDeterministicConfidence } from "./confidenceAgent";
 
-const REPORT_PROMPT = `You are a research report compiler. Using the analyzed claims below, create a structured fact-verification report.
+const REPORT_SUMMARY_PROMPT = `You are a research synthesis compiler.
+Given the verified, contradicted, and insufficient evidence claims below, generate an objective, concise 2-paragraph executive summary.
 
-Claims data:
-{claimsJson}
+STRICT CONSTRAINTS:
+- Be strictly faithful to the verified findings.
+- NEVER present an unsupported or insufficient-evidence claim as a proven fact.
+- Explicitly disclose any limitations, conflicting accounts, or lack of credible sources.
+- Do NOT include markdown code fences or headers; output only the executive summary text.
 
 Topic: {topic}
+Verified Claims:
+{verified}
 
-Generate a report with these sections:
-1. executiveSummary — 2-3 paragraph overview of findings
-2. verifiedClaims — array of claim texts that were verified
-3. unsupportedClaims — array of claim texts that were unsupported
-4. contradictions — array of contradiction descriptions
-5. confidenceTable — array of objects with claimText, score, factors
-6. references — array of all unique source URLs cited
+Contradicted Claims / Conflicts:
+{contradicted}
 
-Return ONLY valid JSON matching this structure:
-{
-  "executiveSummary": "...",
-  "verifiedClaims": ["..."],
-  "unsupportedClaims": ["..."],
-  "contradictions": ["..."],
-  "confidenceTable": [{"claimText": "...", "score": 0, "factors": "..."}],
-  "references": ["..."]
-}`;
+Insufficient Evidence / Unresolved Claims:
+{unsupported}
 
-import { safeLlmInvoke } from "./llmHelper";
+Executive Summary:`;
 
 export async function reportAgent(state: PipelineState): Promise<Partial<PipelineState>> {
-  const llm = new ChatOpenAI({
-    modelName: "gpt-4o-mini",
-    temperature: 0.3,
-    openAIApiKey: env.openaiApiKey,
+  const claims = state.claims || [];
+
+  // Deterministically categorize claims to prevent LLM categorization drift
+  const verified = claims
+    .filter((c) => c.verificationStatus === "supported" || c.verificationStatus === "verified")
+    .map((c) => c.text);
+
+  const contradicted = claims
+    .filter((c) => c.verificationStatus === "contradicted")
+    .map((c) => c.text);
+
+  const unsupported = claims
+    .filter((c) => c.verificationStatus === "insufficient_evidence" || c.verificationStatus === "unsupported" || c.verificationStatus === "verification_error")
+    .map((c) => c.text);
+
+  const allContradictionNotes = Array.from(
+    new Set(claims.flatMap((c) => c.contradictions || []).filter((s) => s.trim().length > 0))
+  );
+
+  const allReferences = Array.from(
+    new Set(claims.flatMap((c) => c.sources.map((s) => s.url)).filter((u) => u && u.startsWith("http")))
+  );
+
+  const confidenceTable = claims.map((c) => {
+    const det = calculateDeterministicConfidence(c);
+    return {
+      claimText: c.text,
+      score: c.confidenceScore,
+      factors: det.factors,
+    };
   });
 
-  const claimsForPrompt = state.claims.map((c) => ({
-    claim: c.text,
-    status: c.verificationStatus,
-    confidence: c.confidenceScore,
-    reasoning: c.reasoning,
-    contradictions: c.contradictions,
-    sources: c.sources.map((s) => s.url),
-  }));
+  // Default deterministic summary
+  let executiveSummary = `FactMesh synthesized research report for topic: "${state.topic}". ` +
+    `Evaluated ${claims.length} discrete factual statements against external web evidence. ` +
+    `Found ${verified.length} supported assertion(s), ${contradicted.length} contradicted claim(s), and ${unsupported.length} statement(s) with insufficient evidence.`;
 
-  const fallbackReport = () => {
-    const verified = state.claims.filter((c) => c.verificationStatus === "verified").map((c) => c.text);
-    const unsupported = state.claims.filter((c) => c.verificationStatus === "unsupported").map((c) => c.text);
-    const contradicted = state.claims.filter((c) => c.verificationStatus === "contradicted").map((c) => c.text);
-    const allSources = Array.from(new Set(state.claims.flatMap((c) => c.sources.map((s) => s.url))));
+  if (verified.length === 0 && claims.length > 0) {
+    executiveSummary += ` Note: No claims could be conclusively confirmed by external authoritative sources during this evaluation.`;
+  }
 
-    return JSON.stringify({
-      executiveSummary: `FactMesh automated research synthesis for topic: "${state.topic}". Analyzed ${state.claims.length} claims against live web sources. Found ${verified.length} verified statements, ${unsupported.length} unsupported claims, and ${contradicted.length} contradicted claims.`,
-      verifiedClaims: verified,
-      unsupportedClaims: unsupported,
-      contradictions: contradicted,
-      confidenceTable: state.claims.map((c) => ({
-        claimText: c.text,
-        score: c.confidenceScore,
-        factors: `Verified status: ${c.verificationStatus} with ${c.sources.length} sources.`,
-      })),
-      references: allSources,
-    });
+  // Attempt to generate a polished executive summary via LLM
+  try {
+    const prompt = REPORT_SUMMARY_PROMPT
+      .replace("{topic}", state.topic)
+      .replace("{verified}", verified.length > 0 ? verified.map((t) => `- ${t}`).join("\n") : "(None)")
+      .replace("{contradicted}", contradicted.length > 0 ? contradicted.map((t) => `- ${t}`).join("\n") : "(None)")
+      .replace("{unsupported}", unsupported.length > 0 ? unsupported.map((t) => `- ${t}`).join("\n") : "(None)");
+
+    const llm = createLlmModel({ temperature: 0.2 });
+    const response = await invokeLlm(llm, prompt);
+    if (response && response.trim().length > 30) {
+      // Strip any accidental markdown formatting or JSON wrappers
+      executiveSummary = response.replace(/^```[a-z]*\s*/i, "").replace(/\s*```$/i, "").trim();
+    }
+  } catch (err: any) {
+    console.warn(`[Report Agent Warning] LLM executive summary generation skipped: ${err.message}. Using deterministic synthesis.`);
+  }
+
+  const report: PipelineReport = {
+    executiveSummary,
+    verifiedClaims: verified,
+    unsupportedClaims: unsupported,
+    contradictions: allContradictionNotes.length > 0 ? allContradictionNotes : contradicted,
+    confidenceTable,
+    references: allReferences,
   };
-
-  const prompt = REPORT_PROMPT
-    .replace("{claimsJson}", JSON.stringify(claimsForPrompt, null, 2))
-    .replace("{topic}", state.topic);
-
-  const response = await safeLlmInvoke(llm, prompt, fallbackReport);
-  const content = response.content;
-
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  const report: PipelineReport = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(fallbackReport());
 
   return {
     report,

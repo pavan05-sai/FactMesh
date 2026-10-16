@@ -1,17 +1,28 @@
 import { Server as SocketServer } from "socket.io";
 
-// Shared state shape flowing through the LangGraph pipeline
+export type VerificationStatus =
+  | "supported"
+  | "verified"
+  | "contradicted"
+  | "insufficient_evidence"
+  | "unsupported"
+  | "verification_error"
+  | "pending";
+
 export interface PipelineSource {
   title: string;
   url: string;
   snippet: string;
+  retrievedAt?: string;
+  domain?: string;
+  isAuthority?: boolean;
 }
 
 export interface PipelineClaim {
   text: string;
   evidence: string[];
   sources: PipelineSource[];
-  verificationStatus: "verified" | "unsupported" | "contradicted" | "pending";
+  verificationStatus: VerificationStatus;
   confidenceScore: number;
   reasoning: string;
   contradictions: string[];
@@ -38,18 +49,23 @@ export interface PipelineState {
 
 // Utility to emit agent status updates via Socket.IO
 export function emitAgentStatus(
-  io: SocketServer,
+  io: SocketServer | undefined,
   runId: string,
   agentName: string,
   status: "pending" | "thinking" | "done" | "error",
   log: string
 ) {
-  io.to(`run:${runId}`).emit("agent:status", {
-    agentName,
-    status,
-    log,
-    timestamp: new Date().toISOString(),
-  });
+  if (!io) return;
+  try {
+    io.to(`run:${runId}`).emit("agent:status", {
+      agentName,
+      status,
+      log,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn(`[Socket Emit Error] Failed to emit status for ${agentName}:`, err);
+  }
 }
 
 export const AGENT_NAMES = [
@@ -62,3 +78,14 @@ export const AGENT_NAMES = [
 ] as const;
 
 export type AgentName = (typeof AGENT_NAMES)[number];
+
+export function normalizeStatus(
+  status: string
+): "supported" | "contradicted" | "insufficient_evidence" | "verification_error" | "pending" {
+  const s = (status || "").toLowerCase().trim();
+  if (s === "supported" || s === "verified") return "supported";
+  if (s === "contradicted" || s === "refuted" || s === "false") return "contradicted";
+  if (s === "insufficient_evidence" || s === "unsupported" || s === "uncertain" || s === "inconclusive") return "insufficient_evidence";
+  if (s === "verification_error" || s === "error" || s === "failed") return "verification_error";
+  return "pending";
+}

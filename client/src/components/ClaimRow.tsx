@@ -12,11 +12,12 @@ export const ClaimRow: React.FC<ClaimRowProps> = ({ claim, index }) => {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'supported':
       case 'verified':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <CheckCircle className="w-3.5 h-3.5" />
-            Verified
+            Supported
           </span>
         );
       case 'contradicted':
@@ -26,11 +27,19 @@ export const ClaimRow: React.FC<ClaimRowProps> = ({ claim, index }) => {
             Contradicted
           </span>
         );
+      case 'insufficient_evidence':
       case 'unsupported':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
             <AlertCircle className="w-3.5 h-3.5" />
-            Unsupported
+            Insufficient Evidence
+          </span>
+        );
+      case 'verification_error':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-red-500/15 text-red-400 border border-red-500/30">
+            <XOctagon className="w-3.5 h-3.5" />
+            Verification Error
           </span>
         );
       default:

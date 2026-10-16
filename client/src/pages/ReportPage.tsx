@@ -127,7 +127,7 @@ export const ReportPage: React.FC = () => {
           <section className="space-y-3">
             <h2 className="text-base font-bold text-amber-400 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400" />
-              Unsupported Statements
+              Unsupported & Insufficient Evidence Statements
             </h2>
             <ul className="space-y-2">
               {report.unsupportedClaims.map((claim, i) => (
@@ -159,7 +159,7 @@ export const ReportPage: React.FC = () => {
                   <tr key={i} className="hover:bg-muted/30">
                     <td className="p-3 text-foreground font-medium">{c.text}</td>
                     <td className="p-3 capitalize font-mono text-muted-foreground">
-                      {c.verificationStatus}
+                      {c.verificationStatus.replace(/_/g, ' ')}
                     </td>
                     <td className="p-3 text-right font-mono font-bold text-foreground">
                       {c.confidenceScore}%

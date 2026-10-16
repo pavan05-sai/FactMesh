@@ -88,6 +88,14 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Global error handling middleware
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "An unexpected internal server error occurred.";
+  console.error(`[Unhandled Server Error] ${status}: ${message}`);
+  res.status(status).json({ error: message });
+});
+
 registerSocketHandlers(io);
 
 async function start() {
