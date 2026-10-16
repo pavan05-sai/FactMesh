@@ -12,13 +12,22 @@ services:
         value: production
       - key: PORT
         value: 5000
-      - key: OPENAI_API_KEY
+      # LLM Provider – set to openrouter or openai
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: OPENROUTER_API_KEY
         sync: false
+      - key: OPENROUTER_MODEL
+        value: nvidia/nemotron-3.5-super-vl:free
+      # Tavily web search
       - key: TAVILY_API_KEY
         sync: false
+      # MongoDB Atlas
       - key: MONGODB_URI
         sync: false
+      # JWT – auto-generated secure value
       - key: JWT_SECRET
         generateValue: true
+      # Comma-separated list of allowed frontend origins (e.g. https://factmesh.vercel.app)
       - key: ALLOWED_ORIGINS
         sync: false
