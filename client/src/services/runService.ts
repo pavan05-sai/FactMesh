@@ -12,7 +12,14 @@ export interface Claim {
   text: string;
   evidence: string[];
   sources: Source[];
-  verificationStatus: 'verified' | 'unsupported' | 'contradicted' | 'pending';
+  verificationStatus:
+    | 'supported'
+    | 'verified'
+    | 'contradicted'
+    | 'insufficient_evidence'
+    | 'unsupported'
+    | 'verification_error'
+    | 'pending';
   confidenceScore: number;
   reasoning: string;
   contradictions: string[];

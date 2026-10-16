@@ -1,47 +1,52 @@
-import { ChatOpenAI } from "@langchain/openai";
-import { env } from "../config/env";
+import { createLlmModel } from "./llmProvider";
+import { invokeLlm, extractAndParseJson } from "./llmHelper";
 import { PipelineState, PipelineClaim } from "./state";
-import { safeLlmInvoke } from "./llmHelper";
 
-const RESEARCH_PROMPT = `You are a research analyst. Given a topic, extract 5-10 discrete, specific, factually checkable claims about it.
+const RESEARCH_SYSTEM_PROMPT = `You are a rigorous research analyst.
+Given a topic or statement, deconstruct it into 3 to 8 discrete, concrete, specific, and factually testable claims.
 
 Rules:
-- Each claim must be a single, concrete statement that can be verified against external sources.
-- Avoid vague or opinion-based statements.
-- Cover different aspects of the topic.
-- Return ONLY valid JSON — an array of strings, each being one claim.
+- Each claim must be a standalone declarative assertion that can be objectively verified or refuted with external factual evidence.
+- Avoid opinions, purely subjective judgments, or broad speculation.
+- Focus on key assertions of who, what, when, where, quantities, or causal relationships.
+- Do NOT include any commentary, greetings, or explanations.
+- Output ONLY a valid JSON array of claim strings.
 
-Topic: {topic}
-
-Return JSON array of claim strings:`;
+Example:
+["NASA launched the Artemis 1 mission on November 16, 2022.", "The Orion spacecraft traveled approximately 1.4 million miles."]`;
 
 export async function researchAgent(state: PipelineState): Promise<Partial<PipelineState>> {
-  const llm = new ChatOpenAI({
-    modelName: "gpt-4o-mini",
-    temperature: 0.3,
-    openAIApiKey: env.openaiApiKey,
-  });
+  const topic = (state.topic || "").trim();
+  if (!topic) {
+    throw new Error("Research topic is empty. Cannot extract claims.");
+  }
 
-  const fallbackClaims = () => JSON.stringify([
-    `${state.topic} - Official public statements and records regarding this event.`,
-    `${state.topic} - Press releases or media confirmations from credible sources.`,
-    `${state.topic} - Official reports verifying current administrative or executive status.`,
-    `${state.topic} - Primary source document verification regarding key figures involved.`
-  ]);
+  const llm = createLlmModel({ temperature: 0.2 });
 
-  const response = await safeLlmInvoke(
-    llm,
-    RESEARCH_PROMPT.replace("{topic}", state.topic),
-    fallbackClaims
+  const prompt = `${RESEARCH_SYSTEM_PROMPT}\n\nTopic to analyze:\n"${topic}"\n\nReturn JSON array of claim strings:`;
+
+  const rawResponse = await invokeLlm(llm, prompt);
+
+  const claimTexts = extractAndParseJson<string[]>(
+    rawResponse,
+    (data) => {
+      if (!Array.isArray(data)) {
+        throw new Error("Expected an array of claim strings.");
+      }
+      const strings = data
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter((text) => text.length > 5);
+
+      if (strings.length === 0) {
+        throw new Error("No non-empty claim strings extracted.");
+      }
+      return strings;
+    },
+    "extracted claims"
   );
-  const content = response.content;
-
-  // Extract JSON array from response (handles markdown code blocks)
-  const jsonMatch = content.match(/\[[\s\S]*\]/);
-  const claimTexts: string[] = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(fallbackClaims());
 
   const claims: PipelineClaim[] = claimTexts.map((text) => ({
-    text: text.trim(),
+    text,
     evidence: [],
     sources: [],
     verificationStatus: "pending",

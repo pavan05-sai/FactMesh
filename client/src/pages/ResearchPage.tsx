@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, ArrowRight, Activity, Terminal } from 'lucide-react';
+import { Loader2, ArrowRight, Activity, Terminal, AlertCircle } from 'lucide-react';
 import { AgentCard } from '../components/AgentCard';
 import { useSocket } from '../hooks/useSocket';
 import { useAppDispatch, useAppSelector } from '../hooks/useRedux';
@@ -122,6 +122,26 @@ export const ResearchPage: React.FC = () => {
             />
           </div>
         </div>
+
+        {currentRun?.status === 'failed' && (
+          <div className="mt-4 p-4 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 space-y-2">
+            <div className="flex items-center gap-2 font-semibold text-sm text-rose-400">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Pipeline Execution Halted</span>
+            </div>
+            <p className="text-xs text-rose-200/90 leading-relaxed">
+              {currentRun.error || 'A critical error occurred while executing the research pipeline.'}
+            </p>
+            <div className="pt-1">
+              <button
+                onClick={() => navigate('/')}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-200 text-xs font-semibold hover:bg-rose-500/30 transition-colors border border-rose-500/40"
+              >
+                Return to Search & Retry
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Agents Pipeline Cards Grid */}

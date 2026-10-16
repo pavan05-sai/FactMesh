@@ -14,9 +14,35 @@ export async function createRun(req: AuthRequest, res: Response): Promise<void> 
       return;
     }
 
+    const trimmedTopic = topic.trim();
+    if (trimmedTopic.length < 3) {
+      res.status(400).json({ error: "Research topic must be at least 3 characters long" });
+      return;
+    }
+    if (trimmedTopic.length > 500) {
+      res.status(400).json({ error: "Research topic cannot exceed 500 characters" });
+      return;
+    }
+
+    // Guard against rapid duplicate submissions
+    const recentRun = await Run.findOne({
+      userId: req.userId,
+      topic: trimmedTopic,
+      status: { $in: ["pending", "running"] },
+      createdAt: { $gte: new Date(Date.now() - 15000) },
+    });
+
+    if (recentRun) {
+      res.status(409).json({
+        error: "A research run with this exact topic is already in progress. Please wait for it to complete.",
+        runId: recentRun._id,
+      });
+      return;
+    }
+
     const run = new Run({
       userId: req.userId,
-      topic: topic.trim(),
+      topic: trimmedTopic,
       status: "pending",
     });
     await run.save();

@@ -1,15 +1,20 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
 export type VerificationStatus =
+  | "supported"
   | "verified"
-  | "unsupported"
   | "contradicted"
+  | "insufficient_evidence"
+  | "unsupported"
+  | "verification_error"
   | "pending";
 
 export interface ISource {
   title: string;
   url: string;
   snippet: string;
+  retrievedAt?: string;
+  domain?: string;
 }
 
 export interface IClaim extends Document {
@@ -29,6 +34,8 @@ const sourceSchema = new Schema<ISource>(
     title: { type: String, default: "" },
     url: { type: String, default: "" },
     snippet: { type: String, default: "" },
+    retrievedAt: { type: String, default: () => new Date().toISOString() },
+    domain: { type: String, default: "" },
   },
   { _id: false }
 );
@@ -40,7 +47,15 @@ const claimSchema = new Schema<IClaim>({
   sources: [sourceSchema],
   verificationStatus: {
     type: String,
-    enum: ["verified", "unsupported", "contradicted", "pending"],
+    enum: [
+      "supported",
+      "verified",
+      "contradicted",
+      "insufficient_evidence",
+      "unsupported",
+      "verification_error",
+      "pending",
+    ],
     default: "pending",
   },
   confidenceScore: { type: Number, default: 0, min: 0, max: 100 },

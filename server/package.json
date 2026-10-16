@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "dev": "node node_modules/tsx/dist/cli.mjs watch src/index.ts",
+    "build": "node node_modules/typescript/bin/tsc",
+    "start": "node dist/index.js",
+    "test": "node node_modules/tsx/dist/cli.mjs --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@langchain/core": "^0.3.0",

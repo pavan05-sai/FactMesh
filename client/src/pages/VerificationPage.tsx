@@ -8,7 +8,7 @@ export const VerificationPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [run, setRun] = useState<Run | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'verified' | 'unsupported' | 'contradicted'>('all');
+  const [filter, setFilter] = useState<'all' | 'supported' | 'insufficient_evidence' | 'contradicted' | 'error'>('all');
 
   useEffect(() => {
     if (id) {
@@ -40,14 +40,24 @@ export const VerificationPage: React.FC = () => {
 
   const claims = run.claims || [];
 
+  const isSupported = (status: string) => status === 'supported' || status === 'verified';
+  const isInsufficient = (status: string) => status === 'insufficient_evidence' || status === 'unsupported';
+  const isContradicted = (status: string) => status === 'contradicted';
+  const isError = (status: string) => status === 'verification_error';
+
   const filteredClaims = claims.filter((c) => {
     if (filter === 'all') return true;
-    return c.verificationStatus === filter;
+    if (filter === 'supported') return isSupported(c.verificationStatus);
+    if (filter === 'contradicted') return isContradicted(c.verificationStatus);
+    if (filter === 'insufficient_evidence') return isInsufficient(c.verificationStatus);
+    if (filter === 'error') return isError(c.verificationStatus);
+    return true;
   });
 
-  const verifiedCount = claims.filter((c) => c.verificationStatus === 'verified').length;
-  const unsupportedCount = claims.filter((c) => c.verificationStatus === 'unsupported').length;
-  const contradictedCount = claims.filter((c) => c.verificationStatus === 'contradicted').length;
+  const supportedCount = claims.filter((c) => isSupported(c.verificationStatus)).length;
+  const insufficientCount = claims.filter((c) => isInsufficient(c.verificationStatus)).length;
+  const contradictedCount = claims.filter((c) => isContradicted(c.verificationStatus)).length;
+  const errorCount = claims.filter((c) => isError(c.verificationStatus)).length;
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 py-4">
@@ -93,27 +103,27 @@ export const VerificationPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setFilter('verified')}
+            onClick={() => setFilter('supported')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-1.5 ${
-              filter === 'verified'
+              filter === 'supported'
                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
                 : 'bg-card border-border text-muted-foreground hover:text-foreground'
             }`}
           >
             <CheckCircle className="w-3.5 h-3.5" />
-            Verified ({verifiedCount})
+            Supported ({supportedCount})
           </button>
 
           <button
-            onClick={() => setFilter('unsupported')}
+            onClick={() => setFilter('insufficient_evidence')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-1.5 ${
-              filter === 'unsupported'
+              filter === 'insufficient_evidence'
                 ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
                 : 'bg-card border-border text-muted-foreground hover:text-foreground'
             }`}
           >
             <AlertTriangle className="w-3.5 h-3.5" />
-            Unsupported ({unsupportedCount})
+            Insufficient Evidence ({insufficientCount})
           </button>
 
           <button
@@ -127,6 +137,20 @@ export const VerificationPage: React.FC = () => {
             <XOctagon className="w-3.5 h-3.5" />
             Contradicted ({contradictedCount})
           </button>
+
+          {errorCount > 0 && (
+            <button
+              onClick={() => setFilter('error')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors flex items-center gap-1.5 ${
+                filter === 'error'
+                  ? 'bg-red-500/20 text-red-400 border-red-500/40'
+                  : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <XOctagon className="w-3.5 h-3.5" />
+              Errors ({errorCount})
+            </button>
+          )}
         </div>
       </div>
 
